@@ -3,78 +3,208 @@
 import Phaser from 'phaser';
 import { Player } from '../classes/Player';
 import { GameManager } from '../classes/GameManager';
+import { DialogBox } from '../classes/DialogBox';
 
 const TILE_SIZE = 32;
+
+interface MapConfig {
+    key: string;
+    tilemap: string;
+    spawn: { x: number, y: number };
+    exits: Array<{
+        x: number, y: number,
+        targetMap: string,
+        targetSpawn: { x: number, y: number }
+    }>;
+}
 
 export class GameScene extends Phaser.Scene {
     private player!: Player;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
     private gm: GameManager = GameManager.getInstance();
     private map!: Phaser.Tilemaps.Tilemap;
+    private collisionLayer!: Phaser.Tilemaps.TilemapLayer;
+    private currentMapKey: string = 'house';
+    private dialogBox!: DialogBox;
+    private uiText!: Phaser.GameObjects.Text;
+    
+    private mapConfigs: { [key: string]: MapConfig } = {
+        house: {
+            key: 'house',
+            tilemap: 'house_map',
+            spawn: { x: 12, y: 8 },
+            exits: [
+                { x: 12, y: 17, targetMap: 'valencia', targetSpawn: { x: 10, y: 2 } }
+            ]
+        },
+        valencia: {
+            key: 'valencia',
+            tilemap: 'valencia_map',
+            spawn: { x: 10, y: 13 },
+            exits: [
+                { x: 10, y: 14, targetMap: 'house', targetSpawn: { x: 12, y: 16 } }
+            ]
+        },
+        valladolid: {
+            key: 'valladolid',
+            tilemap: 'valladolid_map',
+            spawn: { x: 10, y: 13 },
+            exits: [
+                { x: 10, y: 14, targetMap: 'house', targetSpawn: { x: 12, y: 16 } }
+            ]
+        },
+        japon: {
+            key: 'japon',
+            tilemap: 'japon_map',
+            spawn: { x: 10, y: 13 },
+            exits: [
+                { x: 10, y: 14, targetMap: 'house', targetSpawn: { x: 12, y: 16 } }
+            ]
+        }
+    };
 
     constructor() {
         super('GameScene');
     }
 
+    init(data: { mapKey?: string, spawnX?: number, spawnY?: number }) {
+        if (data.mapKey) {
+            this.currentMapKey = data.mapKey;
+        }
+    }
+
     preload() {
+        // Cargar recursos
         this.load.image('tiles', 'assets/images/tileset.png');
         this.load.image('player_placeholder', 'assets/images/player.png');
         this.load.image('package_placeholder', 'assets/images/package.png');
         this.load.image('note_placeholder', 'assets/images/note.png');
         this.load.image('enemy_placeholder', 'assets/images/enemy.png');
+        this.load.image('npc_placeholder', 'assets/images/npc.png');
+        
+        // Cargar todos los mapas
         this.load.tilemapTiledJSON('house_map', 'assets/maps/house_map.json');
+        this.load.tilemapTiledJSON('valencia_map', 'assets/maps/valencia_map.json');
+        this.load.tilemapTiledJSON('valladolid_map', 'assets/maps/valladolid_map.json');
+        this.load.tilemapTiledJSON('japon_map', 'assets/maps/japon_map.json');
     }
 
     create() {
-        // 1. Cargar el mapa
-        this.map = this.make.tilemap({ key: 'house_map' });
+        this.loadMap(this.currentMapKey);
+        this.createUI();
+        this.createPlayer();
+        this.setupControls();
+        this.createInteractables();
+        
+        this.dialogBox = new DialogBox(this);
+        
+        this.events.on('playerStopMove', this.onPlayerStopMove, this);
+    }
 
-        // --- CORRECCIÓN 1: EL NOMBRE EXACTO DEL JSON ---
-        // En tu JSON pone "name": "RPG Nature Tileset", así que ponemos eso aquí.
+    private loadMap(mapKey: string) {
+        // Limpiar mapa anterior si existe
+        if (this.map) {
+            this.map.destroy();
+        }
+
+        const config = this.mapConfigs[mapKey];
+        this.map = this.make.tilemap({ key: config.tilemap });
         const tileset = this.map.addTilesetImage('RPG Nature Tileset', 'tiles')!;
 
-        // 2. Crear las capas
-        // Creamos la capa 'Ground' que SÍ existe en tu JSON
+        // Crear capas
         const groundLayer = this.map.createLayer('Ground', tileset, 0, 0)!;
-
-        // --- CORRECCIÓN 2: EVITAR ERROR DE CAPA FALTANTE ---
-        // Como tu JSON dummy NO tiene capa "Collision", desactivamos esto por ahora
-        // para que el juego no se rompa. Cuando tengas el mapa final, descomenta esto.
+        this.collisionLayer = this.map.createLayer('Collision', tileset, 0, 0)!;
         
-        // const collisionLayer = this.map.createLayer('Collision', tileset, 0, 0)!;
-        // collisionLayer.setCollisionByProperty({ isSolid: true });
-        // this.showDebugWalls(collisionLayer);
-
-        // Si no hay collisionLayer, pasamos 'null' o 'undefined' al jugador temporalmente
-        // o creamos una capa vacía para que no falle.
-        // Para que funcione YA, pasaremos groundLayer como colisión (aunque no bloqueará nada todavía)
+        // Configurar colisiones
+        this.collisionLayer.setCollisionByProperty({ isSolid: true });
+        this.collisionLayer.setVisible(false);
         
-        // 3. Crear Jugador
-        // Pasamos groundLayer solo para que el código no falle por falta de argumentos
-        this.player = new Player(this, TILE_SIZE * 5, TILE_SIZE * 5, 'player_placeholder', groundLayer);
+        // Ajustar cámara
+        this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
+    }
+
+    private createPlayer() {
+        const config = this.mapConfigs[this.currentMapKey];
+        const spawnX = config.spawn.x * TILE_SIZE;
+        const spawnY = config.spawn.y * TILE_SIZE;
+        
+        if (this.player) {
+            this.player.destroy();
+        }
+        
+        this.player = new Player(this, spawnX, spawnY, 'player_placeholder', this.collisionLayer);
+        this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    }
+
+    private setupControls() {
         this.cursors = this.input.keyboard!.createCursorKeys();
+        
+        // Tecla de interacción
+        this.input.keyboard?.on('keydown-SPACE', () => {
+            this.handleInteraction();
+        });
+    }
 
-        // 4. Objetos interactivos
-        const package_sprite = this.add.image(TILE_SIZE * 15, TILE_SIZE * 5, 'package_placeholder').setOrigin(0, 0).setInteractive();
-        package_sprite.on('pointerdown', () => this.handlePackageInteraction());
+    private createUI() {
+        this.uiText = this.add.text(16, 16, this.gm.getStatus(), {
+            fontSize: '18px',
+            color: '#fff',
+            backgroundColor: '#000',
+            padding: { x: 10, y: 5 }
+        }).setScrollFactor(0).setDepth(100);
+    }
 
-        const note_sprite = this.add.image(TILE_SIZE * 16, TILE_SIZE * 5, 'note_placeholder').setOrigin(0, 0).setInteractive();
-        note_sprite.on('pointerdown', () => this.showClueNote());
+    private createInteractables() {
+        // Solo crear objetos específicos del mapa casa
+        if (this.currentMapKey === 'house') {
+            this.createHouseInteractables();
+        } else if (this.currentMapKey === 'valencia') {
+            this.createValenciaInteractables();
+        }
+    }
 
-        // 5. Puntos de viaje
-        this.createTravelPoint(TILE_SIZE * 3, TILE_SIZE * 10, 'Valencia', 2, 'Cajas');
-        this.createTravelPoint(TILE_SIZE * 18, TILE_SIZE * 2, 'Valladolid', 0, 'Interruptores');
-        this.createTravelPoint(TILE_SIZE * 22, TILE_SIZE * 12, 'Japon', 6, 'Preguntas');
+    private createHouseInteractables() {
+        // Paquete
+        const pkg = this.add.sprite(15 * TILE_SIZE, 5 * TILE_SIZE, 'package_placeholder')
+            .setOrigin(0, 0)
+            .setInteractive()
+            .setData('type', 'package');
+        
+        // Nota
+        const note = this.add.sprite(16 * TILE_SIZE, 5 * TILE_SIZE, 'note_placeholder')
+            .setOrigin(0, 0)
+            .setInteractive()
+            .setData('type', 'note');
 
-        this.events.on('playerStopMove', this.checkRandomEncounter, this);
+        // NPCs
+        this.createNPC(10 * TILE_SIZE, 8 * TILE_SIZE, 'Hola! Bienvenida a tu cumpleaños especial. Este lugar está lleno de recuerdos de nosotros.');
+        this.createNPC(5 * TILE_SIZE, 12 * TILE_SIZE, 'He escuchado que hay tres lugares importantes que debes visitar para desbloquear tu regalo...');
+    }
+
+    private createValenciaInteractables() {
+        this.createNPC(10 * TILE_SIZE, 7 * TILE_SIZE, 
+            'Valencia... donde comenzó todo. El primer dígito te espera al resolver el puzzle de cajas.'
+        );
+    }
+
+    private createNPC(x: number, y: number, dialog: string) {
+        const npc = this.add.sprite(x, y, 'npc_placeholder')
+            .setOrigin(0, 0)
+            .setInteractive()
+            .setData('type', 'npc')
+            .setData('dialog', dialog);
     }
 
     update() {
-        this.player.updateMovement();
+        if (this.player) {
+            this.player.updateMovement();
 
-        if (!this.player.isMoving) {
-            this.handleInput();
+            if (!this.player.isMoving && !this.dialogBox.isVisible()) {
+                this.handleInput();
+            }
         }
+        
+        this.uiText.setText(`${this.gm.getStatus()} | Mapa: ${this.currentMapKey}`);
     }
 
     private handleInput() {
@@ -92,57 +222,136 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    private onPlayerStopMove() {
+        this.checkMapTransition();
+        this.checkRandomEncounter();
+    }
+
+    private checkMapTransition() {
+        const config = this.mapConfigs[this.currentMapKey];
+        const playerTileX = Math.floor(this.player.x / TILE_SIZE);
+        const playerTileY = Math.floor(this.player.y / TILE_SIZE);
+
+        for (const exit of config.exits) {
+            if (playerTileX === exit.x && playerTileY === exit.y) {
+                this.transitionToMap(exit.targetMap, exit.targetSpawn);
+                return;
+            }
+        }
+
+        // Verificar si está cerca de un punto de viaje
+        this.checkTravelPoints(playerTileX, playerTileY);
+    }
+
+    private checkTravelPoints(tileX: number, tileY: number) {
+        if (this.currentMapKey !== 'house') return;
+
+        const travelPoints = [
+            { x: 3, y: 10, map: 'valencia', spawn: { x: 10, y: 13 } },
+            { x: 18, y: 2, map: 'valladolid', spawn: { x: 10, y: 13 } },
+            { x: 22, y: 12, map: 'japon', spawn: { x: 10, y: 13 } }
+        ];
+
+        for (const point of travelPoints) {
+            const dist = Phaser.Math.Distance.Between(tileX, tileY, point.x, point.y);
+            if (dist < 2) {
+                this.showTravelPrompt(point.map, point.spawn);
+                return;
+            }
+        }
+    }
+
+    private showTravelPrompt(targetMap: string, spawn: { x: number, y: number }) {
+        const message = `¿Viajar a ${targetMap}? (Presiona ENTER para confirmar)`;
+        this.dialogBox.show(message, () => {
+            this.transitionToMap(targetMap, spawn);
+        });
+    }
+
+    private transitionToMap(mapKey: string, spawn: { x: number, y: number }) {
+        this.cameras.main.fadeOut(500, 0, 0, 0);
+        this.time.delayedCall(500, () => {
+            this.scene.restart({ mapKey: mapKey });
+        });
+    }
+
+    private handleInteraction() {
+        if (this.dialogBox.isVisible()) return;
+
+        // Buscar objeto interactuable cerca del jugador
+        const nearbyObjects = this.children.list.filter(obj => {
+            if (!(obj instanceof Phaser.GameObjects.Sprite)) return false;
+            if (!obj.getData('type')) return false;
+            
+            const dist = Phaser.Math.Distance.Between(
+                this.player.x, this.player.y,
+                obj.x, obj.y
+            );
+            return dist < TILE_SIZE * 1.5;
+        });
+
+        if (nearbyObjects.length > 0) {
+            const obj = nearbyObjects[0] as Phaser.GameObjects.Sprite;
+            this.interactWithObject(obj);
+        }
+    }
+
+    private interactWithObject(obj: Phaser.GameObjects.Sprite) {
+        const type = obj.getData('type');
+        
+        switch(type) {
+            case 'package':
+                this.handlePackageInteraction();
+                break;
+            case 'note':
+                this.showClueNote();
+                break;
+            case 'npc':
+                const dialog = obj.getData('dialog');
+                this.dialogBox.show(dialog);
+                break;
+        }
+    }
+
     private handlePackageInteraction() {
         if (this.gm.checkCode()) {
-            alert(`¡CÓDIGO CORRECTO: ${this.gm.correctCode}! ¡FELIZ CUMPLE 22!`);
+            this.dialogBox.show(
+                `¡CÓDIGO CORRECTO: ${this.gm.correctCode}! ¡FELIZ CUMPLEAÑOS 22! Has completado el juego. ¡Espero que hayas disfrutado este viaje por nuestros recuerdos!`,
+                () => {
+                    this.cameras.main.fadeOut(2000);
+                    this.time.delayedCall(2000, () => {
+                        this.scene.start('VictoryScene');
+                    });
+                }
+            );
         } else {
-            alert(`El paquete está bloqueado. ${this.gm.getStatus()}`);
+            this.dialogBox.show(`El paquete está bloqueado. ${this.gm.getStatus()} Necesitas encontrar los 3 dígitos en orden: Valencia (2), Valladolid (0), Japón (6).`);
         }
     }
 
     private showClueNote() {
-        alert(
-            "Pista: ¡Feliz 22! El primer dígito (2) te espera al Sur, cerca de Valencia. El segundo (0), al Norte. El tercero (6), lejos, al Este. Encuentra los tres en ORDEN para abrir el paquete."
+        this.dialogBox.show(
+            "📝 Pista Principal:\n\n" +
+            "¡Feliz 22! Tu regalo especial te espera, pero primero debes recordar...\n\n" +
+            "🌴 El primer dígito (2) te espera en Valencia al Sur - donde comenzó nuestra historia.\n" +
+            "🏛️ El segundo (0) está en Valladolid al Norte - nuestro hogar actual.\n" +
+            "🗾 El tercero (6) en Japón al Este - nuestro viaje inolvidable.\n\n" +
+            "Encuentra los tres dígitos EN ORDEN para abrir el paquete."
         );
     }
 
-    private createTravelPoint(
-        x: number,
-        y: number,
-        loc: string,
-        digit: number,
-        type: 'Cajas' | 'Interruptores' | 'Preguntas'
-    ) {
-        const point = this.add.text(
-            x,
-            y,
-            `[Viajar a ${loc}]`,
-            {
-                backgroundColor: '#FF8888',
-                padding: { x: 5, y: 5 },
-                color: '#000'
-            }
-        )
-        .setOrigin(0, 0)
-        .setInteractive();
-
-        point.on('pointerdown', () => {
-            this.scene.start('PuzzleScene', { location: loc, digit: digit, type: type });
-        });
-    }
-
     private checkRandomEncounter() {
-        if (Math.random() < 0.015) {
-            this.scene.start('BattleScene');
+        if (this.currentMapKey === 'house') return;
+        
+        if (Math.random() < 0.02) {
+            this.cameras.main.flash(500, 255, 0, 0);
+            this.time.delayedCall(500, () => {
+                this.scene.pause();
+                this.scene.launch('BattleScene', { 
+                    returnScene: 'GameScene',
+                    returnData: { mapKey: this.currentMapKey }
+                });
+            });
         }
-    }
-
-    private showDebugWalls(layer: Phaser.Tilemaps.TilemapLayer) {
-        const debugGraphics = this.add.graphics().setAlpha(0.75);
-        layer.renderDebug(debugGraphics, {
-            tileColor: null,
-            collidingTileColor: new Phaser.Display.Color(243, 234, 48, 255),
-            faceColor: new Phaser.Display.Color(40, 39, 37, 255)
-        });
     }
 }
