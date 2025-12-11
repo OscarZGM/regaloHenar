@@ -1,0 +1,23 @@
+/* Un fondo simple para el estilo cozy */
+body {
+    background-color: #f7f3e8; /* Un color crema suave */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    font-family: 'Arial', sans-serif;
+}
+
+/* El contenedor del juego. Phaser gestiona el tamaño del canvas. */
+#game-container {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border: 5px solid #a38c71; /* Un borde de madera o cozy */
+    border-radius: 8px;
+    overflow: hidden; /* Asegura que el canvas encaje */
+}
+
+/* Opcional: Estilo para el texto/UI */
+canvas {
+    display: block; /* Elimina un pequeño espacio en blanco debajo del canvas */
+}
