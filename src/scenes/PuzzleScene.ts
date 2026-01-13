@@ -352,6 +352,14 @@ export class PuzzleScene extends Phaser.Scene {
             wordWrap: { width: 600 }
         }).setOrigin(0.5);
         
+        // En createQuestionPuzzle()
+        this.inputElement.style.border = '4px solid #a38c71'; // Borde estilo madera
+        this.inputElement.style.borderRadius = '8px';
+        this.inputElement.style.backgroundColor = '#f7f3e8';
+        this.inputElement.style.color = '#5c4b37';
+        this.inputElement.style.fontFamily = 'Arial, sans-serif';
+        this.inputElement.style.textAlign = 'center';
+        this.inputElement.style.outline = 'none';
         // Crear input HTML
         this.inputElement = document.createElement('input');
         this.inputElement.type = 'text';

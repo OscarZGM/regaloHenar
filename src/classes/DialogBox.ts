@@ -12,7 +12,6 @@ export class DialogBox {
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
         this.createBox();
-        this.setupInput();
     }
 
     private createBox() {
@@ -35,25 +34,22 @@ export class DialogBox {
             align: 'left',
             wordWrap: { width: width - 40 }
         })
-        .setScrollFactor(0)
-        .setDepth(1001)
-        .setOrigin(0.5, 0.5)
-        .setVisible(false);
+            .setScrollFactor(0)
+            .setDepth(1001)
+            .setOrigin(0.5, 0.5)
+            .setVisible(false);
     }
 
-    private setupInput() {
-        this.scene.input.keyboard?.on('keydown-SPACE', () => {
-            if (this.visible) {
-                this.hide();
-            }
-        });
+    // ❌ ELIMINADO: setupInput() interno. Ahora el control es externo.
+    // private setupInput() { ... }
 
-        this.scene.input.keyboard?.on('keydown-ENTER', () => {
-            if (this.visible && this.callback) {
-                this.callback();
-                this.hide();
-            }
-        });
+    public handleConfirm() {
+        if (!this.visible) return;
+
+        if (this.callback) {
+            this.callback();
+        }
+        this.hide();
     }
 
     public show(message: string, callback?: () => void) {

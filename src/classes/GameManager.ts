@@ -2,17 +2,30 @@
 
 export class GameManager {
     private static instance: GameManager;
-    
-    // Almacena los dígitos encontrados (null si no se han encontrado)
+
     public cluesFound: { valencia: number | null, valladolid: number | null, japon: number | null };
     public readonly correctCode: string = "206";
 
+    // 🚩 NUEVO: Almacena el estado de los enemigos
+    public valenciaEnemiesDefeated: boolean = false;
+    public lastBattleTime: number = 0;
+
+    // 🚩 NUEVO: Estados para las misiones de los dígitos
+    public heartsCollected: number = 0;
+    public hasCombinedHearts: boolean = false;
+    public yenCount: number = 0;
+    public hasCola: boolean = false;
+    public quizCompleted: boolean = false;
+
+    // 🚩 NUEVO: Arrays de persistencia por ID
+    public collectedYens: number[] = [];
+    public defeatedEnemies: string[] = [];
+
     private constructor() {
-        // Los dígitos correctos son 2, 0, 6 en el orden Valencia, Valladolid, Japón.
         this.cluesFound = {
-            valencia: null, 
+            valencia: null,
             valladolid: null,
-            japon: null      
+            japon: null
         };
     }
 
@@ -36,9 +49,9 @@ export class GameManager {
     // Verifica si los tres dígitos se han encontrado y están en el orden 206
     public checkCode(): boolean {
         if (this.cluesFound.valencia !== null && this.cluesFound.valladolid !== null && this.cluesFound.japon !== null) {
-            const currentCode = 
-                `${this.cluesFound.valencia}` + 
-                `${this.cluesFound.valladolid}` + 
+            const currentCode =
+                `${this.cluesFound.valencia}` +
+                `${this.cluesFound.valladolid}` +
                 `${this.cluesFound.japon}`;
             return currentCode === this.correctCode;
         }
